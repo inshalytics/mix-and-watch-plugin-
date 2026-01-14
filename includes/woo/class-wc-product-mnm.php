@@ -4,7 +4,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-class WC_Product_MNM extends WC_Product
+class WC_Product_MNM extends WC_Product_Simple
 {
 
     /**

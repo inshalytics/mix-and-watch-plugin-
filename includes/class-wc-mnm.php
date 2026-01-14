@@ -32,6 +32,8 @@ final class WC_MNM
     {
         require_once WC_MNM_PLUGIN_DIR . 'includes/admin/class-wc-mnm-product-type.php';
         require_once WC_MNM_PLUGIN_DIR . 'includes/woo/class-wc-product-mnm.php';
+        require_once WC_MNM_PLUGIN_DIR . 'includes/admin/class-wc-mnm-product-data.php';
+
     }
 
     /**

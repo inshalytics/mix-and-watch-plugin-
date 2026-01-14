@@ -1,6 +1,6 @@
 <?php
 /*
-  Plugin Name: Mix & Wlatch Products for WooCommerce
+  Plugin Name: Mix & Match Products for WooCommerce
   Plugin URI:  https://inshalytics.com/
   Description: Allow your customers to combine products and create their own variations, and increase your average order value
   Version:     1.0.0
