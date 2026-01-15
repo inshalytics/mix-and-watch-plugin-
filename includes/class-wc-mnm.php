@@ -6,7 +6,6 @@ if (!defined('ABSPATH')) {
 
 final class WC_MNM
 {
-
     /**
      * Boot plugin hooks.
      */
@@ -23,6 +22,9 @@ final class WC_MNM
 
         // Map product type -> product class.
         add_filter('woocommerce_product_class', [$this, 'map_product_class'], 10, 2);
+
+        // Initialize frontend separately
+        $this->init_frontend();
     }
 
     /**
@@ -30,10 +32,27 @@ final class WC_MNM
      */
     private function includes(): void
     {
+        // Always load admin classes (they handle their own admin checks)
         require_once WC_MNM_PLUGIN_DIR . 'includes/admin/class-wc-mnm-product-type.php';
-        require_once WC_MNM_PLUGIN_DIR . 'includes/woo/class-wc-product-mnm.php';
         require_once WC_MNM_PLUGIN_DIR . 'includes/admin/class-wc-mnm-product-data.php';
 
+        // WooCommerce product class
+        require_once WC_MNM_PLUGIN_DIR . 'includes/woo/class-wc-product-mnm.php';
+
+        // Frontend class (loaded always, but only initialized on frontend)
+        require_once WC_MNM_PLUGIN_DIR . 'includes/frontend/class-wc-mnm-frontend.php';
+    }
+
+    /**
+     * Initialize frontend only when needed
+     */
+    private function init_frontend(): void
+    {
+        // Check if this is frontend request
+        if (!is_admin() || (defined('DOING_AJAX') && DOING_AJAX)) {
+            // Initialize frontend
+            WC_MNM_Frontend::get_instance();
+        }
     }
 
     /**

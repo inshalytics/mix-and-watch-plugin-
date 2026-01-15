@@ -17,15 +17,15 @@ final class WC_MNM_Product_Type_Admin
 
 
         add_action('admin_footer', [$this, 'register_mnm_as_simple']);
-
+ 
         // Add our type to the list of types that should show certain tabs.
-        //add_filter('woocommerce_product_data_tabs', [$this, 'product_data_tabs']);
+        // add_filter('woocommerce_product_data_tabs', [$this, 'product_data_tabs']);
 
         // Tell WooCommerce which features our product type supports
-        //add_filter('woocommerce_product_type_supports', [$this, 'add_product_type_supports'], 10, 3);
+        // add_filter('woocommerce_product_type_supports', [$this, 'add_product_type_supports'], 10, 3);
 
         // Add JS so WC knows how to show/hide tabs for our type.
-       // add_action('admin_footer', [$this, 'admin_js']);
+        // add_action('admin_footer', [$this, 'admin_js']);
     }
 
     public function product_type_options(array $options): array

@@ -8,11 +8,9 @@
   Author URI:  https://inshalytics.com
 */
 
-
 if (!defined('ABSPATH')) {
-    exit;
+  exit;
 }
-
 
 define('WC_MNM_VERSION', '0.1.0');
 define('WC_MNM_PLUGIN_FILE', __FILE__);
@@ -37,5 +35,3 @@ function wc_mnm_init_plugin()
   $plugin->init();
 }
 add_action('plugins_loaded', 'wc_mnm_init_plugin');
-
-?>
