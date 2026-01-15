@@ -2,7 +2,7 @@
   "use strict";
 
   /**
-   * Mix & Match Frontend - Minimal Version
+   * Mix & Match 
    */
   class MixAndMatchMinimal {
     constructor() {
@@ -12,6 +12,9 @@
       this.selectedProducts = {};
       this.isValid = false;
 
+      // Store pricing mode
+      this.pricingMode = this.config.pricing_mode || "per_item";
+
       // Bind methods
       this.init = this.init.bind(this);
       this.updateTotals = this.updateTotals.bind(this);
@@ -19,6 +22,11 @@
       this.updateDescription = this.updateDescription.bind(this);
       this.handleQuantityChange = this.handleQuantityChange.bind(this);
       this.handleButtonClick = this.handleButtonClick.bind(this);
+      this.updatePriceDisplay = this.updatePriceDisplay.bind(this);
+      this.incrementQuantity = this.incrementQuantity.bind(this);
+      this.decrementQuantity = this.decrementQuantity.bind(this);
+      this.getProductIdFromInput = this.getProductIdFromInput.bind(this);
+      this.updateButtonState = this.updateButtonState.bind(this);
 
       // Initialize on DOM ready
       $(document).ready(this.init);
@@ -44,6 +52,8 @@
 
       // Initial update
       this.updateTotals();
+
+      console.log("MNM: Initialized with pricing mode:", this.pricingMode);
     }
 
     /**
@@ -65,6 +75,13 @@
         if (!this.isValid) {
           e.preventDefault();
           this.$description.addClass("warning");
+          // Scroll to error
+          $("html, body").animate(
+            {
+              scrollTop: this.$description.offset().top - 100,
+            },
+            300
+          );
         }
       });
 
@@ -84,32 +101,76 @@
      * Handle quantity change
      */
     handleQuantityChange(input) {
-      const $input = $(input);
-      const productId = this.getProductIdFromInput($input);
-      let newValue = parseInt($input.val()) || 0;
-
-      // Validate maximum if set
-      if (this.config.max_qty > 0 && newValue > this.config.max_qty) {
-        newValue = this.config.max_qty;
-        $input.val(newValue);
-      }
-
-      // Validate minimum (can't go below 0)
-      if (newValue < 0) {
+    const $input = $(input);
+    const productId = this.getProductIdFromInput($input);
+    const oldValue = this.selectedProducts[productId] || 0;
+    let newValue = parseInt($input.val()) || 0;
+    const maxQty = this.config.max_qty || 0;
+    
+    // Calculate current total without this product
+    let currentTotal = this.totalItems - oldValue;
+    
+    // Enforce maximum at container level
+    if (maxQty > 0) {
+        // Calculate maximum allowed for this specific product
+        const maxAllowedForThisProduct = Math.max(0, maxQty - currentTotal);
+        
+        if (newValue > maxAllowedForThisProduct) {
+            newValue = maxAllowedForThisProduct;
+            $input.val(newValue);
+            
+            // Show warning if trying to exceed max
+            if (newValue < oldValue) {
+                this.showMaxLimitWarning();
+            }
+        }
+    }
+    
+    // Validate minimum
+    if (newValue < 0) {
         newValue = 0;
         $input.val(newValue);
-      }
-
-      // Update selected products
-      if (newValue > 0) {
-        this.selectedProducts[productId] = newValue;
-      } else {
-        delete this.selectedProducts[productId];
-      }
-
-      // Update UI
-      this.updateTotals();
     }
+    
+    // Update selected products
+    if (newValue > 0) {
+        this.selectedProducts[productId] = newValue;
+    } else {
+        delete this.selectedProducts[productId];
+    }
+    
+    // Update UI
+    this.updateTotals();
+}
+
+/**
+ * Show max limit warning
+ */
+showMaxLimitWarning() {
+    const maxQty = this.config.max_qty || 0;
+    
+    // Create or update warning message
+    let $warning = $('.wc-mnm-max-warning');
+    
+    if (!$warning.length) {
+        $warning = $('<div class="wc-mnm-max-warning"></div>');
+        $('.wc-mnm-description').after($warning);
+    }
+    
+    $warning.html(`
+        <div class="wc-mnm-validation-warning">
+            Maximum limit reached: You can select up to ${maxQty} items total.
+            To add more items, please reduce quantities of other products.
+        </div>
+    `).slideDown(300);
+    
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+        $warning.slideUp(300, () => {
+            $warning.remove();
+        });
+    }, 5000);
+}
 
     /**
      * Handle button clicks
@@ -134,16 +195,27 @@
      * Increment quantity
      */
     incrementQuantity(input) {
-      const $input = $(input);
-      const currentValue = parseInt($input.val()) || 0;
-      let newValue = currentValue + 1;
-
-      if (this.config.max_qty > 0 && newValue > this.config.max_qty) {
-        newValue = this.config.max_qty;
-      }
-
-      $input.val(newValue).trigger("input");
+    const $input = $(input);
+    const currentValue = parseInt($input.val()) || 0;
+    const maxQty = this.config.max_qty || 0;
+    
+    // Check if we can add more
+    if (maxQty > 0 && this.totalItems >= maxQty) {
+        this.showMaxLimitWarning();
+        return;
     }
+    
+    let newValue = currentValue + 1;
+    
+    // Check individual product max (if any)
+    const individualMax = parseInt($input.attr('max')) || 0;
+    if (individualMax > 0 && newValue > individualMax) {
+        newValue = individualMax;
+    }
+    
+    $input.val(newValue).trigger('input');
+  }
+
 
     /**
      * Decrement quantity
@@ -154,6 +226,24 @@
       const newValue = Math.max(0, currentValue - 1);
 
       $input.val(newValue).trigger("input");
+    }
+
+    /**
+     * Update button states based on availability
+     */
+    updateProductButtonStates() {
+        const maxQty = this.config.max_qty || 0;
+        const canAddMore = maxQty === 0 || this.totalItems < maxQty;
+        
+        // Disable all increase buttons if max reached
+        $('.wc-mnm-quantity-btn.increase').prop('disabled', !canAddMore);
+        
+        // Add visual indicator
+        if (maxQty > 0 && this.totalItems >= maxQty) {
+            $('.wc-mnm-container').addClass('max-reached');
+        } else {
+            $('.wc-mnm-container').removeClass('max-reached');
+        }
     }
 
     /**
@@ -185,22 +275,66 @@
      * Update display
      */
     updateDisplay() {
-      const maxQty = this.config.max_qty || 0;
-
-      // Update items count
-      if (maxQty > 0) {
-        this.$itemsCount.text(`${this.totalItems}/${maxQty} items`);
-      } else {
-        this.$itemsCount.text(`${this.totalItems} items`);
+    const maxQty = this.config.max_qty || 0;
+    
+    // Update items count with progress indicator
+    if (maxQty > 0) {
+        const percentage = Math.min(100, (this.totalItems / maxQty) * 100);
+        this.$itemsCount.html(`
+            <span class="wc-mnm-count">${this.totalItems}/${maxQty} items</span>
+            ${this.totalItems >= maxQty ? '<span class="wc-mnm-limit-reached">(Maximum reached)</span>' : ''}
+        `);
+        
+        // Update progress indicator if it exists
+        const $progress = $('#wc-mnm-progress-fill');
+        if ($progress.length) {
+            $progress.css('width', percentage + '%');
+        }
+        } else {
+            this.$itemsCount.text(`${this.totalItems} items`);
+        }
+        
+        // Update price if in per-item mode
+        if (this.pricingMode === 'per_item' && this.$totalPrice.length) {
+            this.updatePriceDisplay();
+        }
+        
+        // Update description
+        this.updateDescription();
+        
+        // Update button states
+        this.updateProductButtonStates();
       }
 
-      // Update price if in per-item mode
-      if (this.config.pricing_mode === "per_item" && this.$totalPrice.length) {
-        this.$totalPrice.text(wc_price(this.totalPrice));
-      }
+    /**
+     * Update price display for per-item mode
+     */
+    updatePriceDisplay() {
+      // Format and update price using WooCommerce's price formatting
+      const formattedPrice = this.formatPrice(this.totalPrice);
+      this.$totalPrice.text(formattedPrice);
+    }
 
-      // Update description
-      this.updateDescription();
+    /**
+     * Format price according to WooCommerce settings
+     */
+    formatPrice(price) {
+      const symbol = this.config.currency_symbol || "$";
+      const position = this.config.currency_position || "left";
+      const formatted = parseFloat(price).toFixed(2);
+
+      switch (position) {
+        case "left":
+          return symbol + formatted;
+        case "right":
+          return formatted + symbol;
+        case "left_space":
+          return symbol + " " + formatted;
+        case "right_space":
+          return formatted + " " + symbol;
+        default:
+          return symbol + formatted;
+      }
     }
 
     /**
@@ -211,28 +345,30 @@
       let message = "";
       let className = "";
 
-      if (minQty > 0) {
-        if (this.totalItems >= minQty) {
-          message =
-            this.config.i18n?.selection_complete ||
-            "Selection complete. Ready to add to cart.";
-          className = "success";
-        } else {
-          const needed = minQty - this.totalItems;
+      if (this.totalItems === 0) {
+        if (minQty > 0) {
           message = this.config.i18n?.need_more_items
-            ? this.config.i18n.need_more_items.replace("%d", needed)
-            : `You have selected ${this.totalItems} items, please select ${needed} more item(s) to continue.`;
-          className = "warning";
-        }
-      } else {
-        if (this.totalItems > 0) {
-          message =
-            this.config.i18n?.selection_complete || "Ready to add to cart.";
-          className = "success";
+            ? this.config.i18n.need_more_items
+                .replace("%d", minQty)
+                .replace("%d", minQty)
+            : `You have selected 0 items, please select ${minQty} items total to continue.`;
         } else {
           message = this.config.i18n?.select_items || "Please select items.";
-          className = "";
         }
+        className = "";
+      } else if (minQty > 0 && this.totalItems < minQty) {
+        const needed = minQty - this.totalItems;
+        message = this.config.i18n?.need_more_items
+          ? this.config.i18n.need_more_items
+              .replace("%d", this.totalItems)
+              .replace("%d", needed)
+          : `You have selected ${this.totalItems} items total, please select ${needed} more item(s).`;
+        className = "warning";
+      } else if (this.totalItems >= minQty) {
+        message =
+          this.config.i18n?.selection_complete ||
+          `Selected ${this.totalItems} items total. Ready to add to cart.`;
+        className = "success";
       }
 
       this.$description
@@ -249,12 +385,12 @@
       const maxQty = this.config.max_qty || 0;
       let isValid = true;
 
-      // Check minimum quantity
+      // Check minimum total quantity
       if (minQty > 0 && this.totalItems < minQty) {
         isValid = false;
       }
 
-      // Check maximum quantity
+      // Check maximum total quantity
       if (maxQty > 0 && this.totalItems > maxQty) {
         isValid = false;
       }
@@ -292,10 +428,24 @@
       const match = name.match(/\[(\d+)\]/);
       return match ? match[1] : null;
     }
+
+    /**
+     * Get current selection summary
+     */
+    getSelectionSummary() {
+      return {
+        totalItems: this.totalItems,
+        totalPrice: this.totalPrice,
+        selectedProducts: { ...this.selectedProducts },
+        isValid: this.isValid,
+        pricingMode: this.pricingMode,
+      };
+    }
   }
 
-  // Initialize
+  // Initialize when DOM is ready
   $(document).ready(function () {
+    // Check if we're on a Mix & Match product page
     if ($(".wc-mnm-container").length && window.wc_mnm_params) {
       window.wc_mnm_instance = new MixAndMatchMinimal();
     }

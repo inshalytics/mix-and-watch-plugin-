@@ -123,11 +123,9 @@ class WC_Product_MNM extends WC_Product_Simple
             ];
 
             // Check if we need to include subcategories
-            // For now, let's just get direct category products
-
             $args = [
                 'limit' => -1,
-                'type' => ['simple'],  // Array format
+                'type' => ['simple'], 
                 'status' => 'publish',
                 'return' => 'objects',
                 'orderby' => 'title',
@@ -142,7 +140,7 @@ class WC_Product_MNM extends WC_Product_Simple
 
             $products = wc_get_products($args);
 
-            // Debug: Log results
+            // Debug
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log('[WC_MNM] Found ' . count($products) . ' products from categories');
                 foreach ($products as $product) {
@@ -157,7 +155,7 @@ class WC_Product_MNM extends WC_Product_Simple
             }
         }
 
-        // Debug: Final result
+        // Debug
         if (defined('WP_DEBUG') && WP_DEBUG) {
             error_log('[WC_MNM] Total child products returned: ' . count($child_products));
         }
@@ -168,7 +166,6 @@ class WC_Product_MNM extends WC_Product_Simple
 
     /**
      * Get container size string for display
-     * Example: "Choose 3-6 items" or "Choose at least 3 items"
      */
     public function get_container_size_string(): string
     {
@@ -190,11 +187,42 @@ class WC_Product_MNM extends WC_Product_Simple
     }
 
     /**
-     * Check if product is valid for adding to cart (basic check)
+     * Check if product is valid for adding to cart
      */
     public function is_purchasable(): bool
     {
         $allowed_products = $this->get_allowed_child_products();
         return parent::is_purchasable() && !empty($allowed_products);
+    }
+
+
+    /**
+     * Get display layout
+     */
+    public function get_display_layout(): string
+    {
+        return $this->get_meta('_mnm_display_layout', true) ?: 'grid';
+    }
+
+    /**
+     * Get container rules description
+     */
+    public function get_rules_description(): string
+    {
+        $min = $this->get_min_quantity();
+        $max = $this->get_max_quantity();
+
+        if ($min > 0 && $max > 0) {
+            if ($min === $max) {
+                return sprintf(__('Select exactly %d items total.', 'wc-mix-and-match'), $min);
+            }
+            return sprintf(__('Select %1$d to %2$d items total.', 'wc-mix-and-match'), $min, $max);
+        } elseif ($min > 0) {
+            return sprintf(__('Select at least %d items total.', 'wc-mix-and-match'), $min);
+        } elseif ($max > 0) {
+            return sprintf(__('Select up to %d items total.', 'wc-mix-and-match'), $max);
+        }
+
+        return __('Select items.', 'wc-mix-and-match');
     }
 }

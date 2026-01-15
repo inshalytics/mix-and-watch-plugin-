@@ -6,11 +6,6 @@ if (!defined('ABSPATH')) {
 
 final class WC_MNM_Product_Data
 {
-    /**
-     * @var WC_Product|null
-     */
-    private $product = null;
-
     public function __construct()
     {
         // Add custom fields
@@ -24,23 +19,12 @@ final class WC_MNM_Product_Data
     }
 
     /**
-     * Get current product for editing
-     */
-    private function get_current_product(): ?WC_Product
-    {
-        if (null === $this->product) {
-            global $product_object;
-            $this->product = $product_object;
-        }
-        return $this->product;
-    }
-
-    /**
      * Add Mix & Match fields in General tab
      */
     public function add_fields(): void
     {
-        $product = $this->get_current_product();
+        global $product_object;
+        $product = $product_object;
 
         // Only show for MNM products
         if (!$product || $product->get_type() !== 'mnm') {
@@ -53,14 +37,17 @@ final class WC_MNM_Product_Data
         $min_qty = $product->get_meta('_mnm_min_qty', true) ?: '';
         $max_qty = $product->get_meta('_mnm_max_qty', true) ?: '';
         $child_source = $product->get_meta('_mnm_child_source', true) ?: 'products';
+        $display_layout = $product->get_meta('_mnm_display_layout', true) ?: 'grid';
 
         // Get selected products and categories
         $selected_products = $product->get_meta('_mnm_child_products', true) ?: [];
         $selected_categories = $product->get_meta('_mnm_child_categories', true) ?: [];
 
-        echo '<div class="options_group show_if_mnm" id="mnm_product_data">';
+        echo '<div class="options_group show_if_mnm" id="mnm_product_data" style="padding: 0 12px;">';
 
-        // Pricing mode
+        // === PRICING SETTINGS ===
+        echo '<h4 style="margin: 1.5em 0 0.5em; padding-bottom: 0.5em; border-bottom: 1px solid #ddd;">' . __('Pricing Settings', 'wc-mix-and-match') . '</h4>';
+
         woocommerce_wp_select([
             'id' => '_mnm_pricing_mode',
             'label' => __('Pricing Mode', 'wc-mix-and-match'),
@@ -73,7 +60,6 @@ final class WC_MNM_Product_Data
             'description' => __('Choose how this container is priced.', 'wc-mix-and-match'),
         ]);
 
-        // Fixed price
         woocommerce_wp_text_input([
             'id' => '_mnm_fixed_price',
             'label' => __('Fixed Container Price (' . get_woocommerce_currency_symbol() . ')', 'wc-mix-and-match'),
@@ -88,7 +74,9 @@ final class WC_MNM_Product_Data
             'desc_tip' => true,
         ]);
 
-        // Min quantity
+        // === QUANTITY RULES ===
+        echo '<h4 style="margin: 1.5em 0 0.5em; padding-bottom: 0.5em; border-bottom: 1px solid #ddd;">' . __('Quantity Rules', 'wc-mix-and-match') . '</h4>';
+
         woocommerce_wp_text_input([
             'id' => '_mnm_min_qty',
             'label' => __('Minimum Quantity', 'wc-mix-and-match'),
@@ -98,11 +86,10 @@ final class WC_MNM_Product_Data
                 'min' => '0',
                 'placeholder' => __('0', 'wc-mix-and-match'),
             ],
-            'description' => __('Minimum number of items customers must select. Set 0 for no minimum.', 'wc-mix-and-match'),
+            'description' => __('Minimum total quantity customers must select. Set 0 for no minimum.', 'wc-mix-and-match'),
             'desc_tip' => true,
         ]);
 
-        // Max quantity
         woocommerce_wp_text_input([
             'id' => '_mnm_max_qty',
             'label' => __('Maximum Quantity', 'wc-mix-and-match'),
@@ -112,11 +99,28 @@ final class WC_MNM_Product_Data
                 'min' => '0',
                 'placeholder' => __('0', 'wc-mix-and-match'),
             ],
-            'description' => __('Maximum number of items customers can select. Set 0 for unlimited.', 'wc-mix-and-match'),
+            'description' => __('Maximum total quantity customers can select. Set 0 for unlimited.', 'wc-mix-and-match'),
             'desc_tip' => true,
         ]);
 
-        // Child products source
+        // === DISPLAY SETTINGS ===
+        echo '<h4 style="margin: 1.5em 0 0.5em; padding-bottom: 0.5em; border-bottom: 1px solid #ddd;">' . __('Display Settings', 'wc-mix-and-match') . '</h4>';
+
+        woocommerce_wp_select([
+            'id' => '_mnm_display_layout',
+            'label' => __('Display Layout', 'wc-mix-and-match'),
+            'value' => $display_layout,
+            'options' => [
+                'grid' => __('Grid Layout', 'wc-mix-and-match'),
+                'list' => __('List Layout', 'wc-mix-and-match'),
+            ],
+            'desc_tip' => true,
+            'description' => __('Choose how child products are displayed.', 'wc-mix-and-match'),
+        ]);
+
+        // === CHILD PRODUCTS ===
+        echo '<h4 style="margin: 1.5em 0 0.5em; padding-bottom: 0.5em; border-bottom: 1px solid #ddd;">' . __('Child Products', 'wc-mix-and-match') . '</h4>';
+
         woocommerce_wp_select([
             'id' => '_mnm_child_source',
             'label' => __('Child Product Source', 'wc-mix-and-match'),
@@ -129,7 +133,7 @@ final class WC_MNM_Product_Data
             'description' => __('Choose how customers can select products.', 'wc-mix-and-match'),
         ]);
 
-        // Child products (specific products)
+        // Child products
         woocommerce_wp_select([
             'id' => '_mnm_child_products',
             'label' => __('Child Products', 'wc-mix-and-match'),
@@ -190,6 +194,11 @@ final class WC_MNM_Product_Data
             ? absint($_POST['_mnm_max_qty'])
             : 0;
 
+        // Display layout
+        $display_layout = isset($_POST['_mnm_display_layout'])
+            ? wc_clean($_POST['_mnm_display_layout'])
+            : 'grid';
+
         // Child products
         $children = isset($_POST['_mnm_child_products'])
             ? array_map('absint', (array) $_POST['_mnm_child_products'])
@@ -213,24 +222,12 @@ final class WC_MNM_Product_Data
             ? array_map('absint', (array) $_POST['_mnm_child_categories'])
             : [];
 
-        // Validate based on source
-        if ($child_source === 'products' && empty($children)) {
-            WC_Admin_Meta_Boxes::add_error(
-                __('Please select at least one product for Mix & Match.', 'wc-mix-and-match')
-            );
-        }
-
-        if ($child_source === 'categories' && empty($categories)) {
-            WC_Admin_Meta_Boxes::add_error(
-                __('Please select at least one category for Mix & Match.', 'wc-mix-and-match')
-            );
-        }
-
         // Save meta
         $product->update_meta_data('_mnm_pricing_mode', $pricing_mode);
         $product->update_meta_data('_mnm_fixed_price', $fixed_price);
         $product->update_meta_data('_mnm_min_qty', $min_qty);
         $product->update_meta_data('_mnm_max_qty', $max_qty);
+        $product->update_meta_data('_mnm_display_layout', $display_layout);
         $product->update_meta_data('_mnm_child_products', $children);
         $product->update_meta_data('_mnm_child_source', $child_source);
         $product->update_meta_data('_mnm_child_categories', $categories);
@@ -282,7 +279,7 @@ final class WC_MNM_Product_Data
     }
 
     /**
-     * Conditional field visibility and UX enhancements
+     * Admin JS
      */
     public function admin_js(): void
     {
@@ -316,47 +313,6 @@ final class WC_MNM_Product_Data
                     }
                 }
 
-                function validateMNMFields() {
-                    var minQty = parseInt($('#_mnm_min_qty').val()) || 0;
-                    var maxQty = parseInt($('#_mnm_max_qty').val()) || 0;
-
-                    // Validate min <= max when both are set
-                    if (maxQty > 0 && minQty > maxQty) {
-                        $('#_mnm_min_qty').val(maxQty);
-                    }
-
-                    // Update placeholder based on min/max
-                    var container = $('#mnm_product_data');
-                    var totalSelected = 0;
-
-                    // Count selected products (placeholder for now)
-                    container.find('input[type="number"]').each(function () {
-                        totalSelected += parseInt($(this).val()) || 0;
-                    });
-
-                    // Update summary
-                    var summaryText = '';
-                    if (minQty > 0 && maxQty > 0) {
-                        summaryText = 'Customers must select between ' + minQty + ' and ' + maxQty + ' items.';
-                    } else if (minQty > 0) {
-                        summaryText = 'Customers must select at least ' + minQty + ' items.';
-                    } else if (maxQty > 0) {
-                        summaryText = 'Customers can select up to ' + maxQty + ' items.';
-                    } else {
-                        summaryText = 'Customers can select any number of items.';
-                    }
-
-                    // Remove existing summary
-                    $('.mnm-summary').remove();
-
-                    // Add summary
-                    $('#mnm_product_data').append(
-                        '<p class="description mnm-summary" style="margin-top: 10px; padding: 10px; background: #f5f5f5; border-radius: 4px;">' +
-                        '<strong>' + summaryText + '</strong>' +
-                        '</p>'
-                    );
-                }
-
                 // Initialize on page load
                 $(document).ready(function () {
                     // Wrap form fields for better targeting
@@ -365,52 +321,13 @@ final class WC_MNM_Product_Data
 
                     // Initial toggle
                     toggleMNMFields();
-                    validateMNMFields();
 
                     // Add event listeners
                     $(document).on('change', '#_mnm_child_source, #_mnm_pricing_mode', toggleMNMFields);
-                    $(document).on('change keyup', '#_mnm_min_qty, #_mnm_max_qty', validateMNMFields);
-
-                    // Add validation before form submission
-                    $('form#post').on('submit', function (e) {
-                        var childSource = $('#_mnm_child_source').val();
-
-                        if (childSource === 'products') {
-                            var selectedProducts = $('#_mnm_child_products').val() || [];
-                            if (selectedProducts.length === 0) {
-                                alert('<?php esc_html_e('Please select at least one product.', 'wc-mix-and-match'); ?>');
-                                e.preventDefault();
-                                return false;
-                            }
-                        } else if (childSource === 'categories') {
-                            var selectedCategories = $('#_mnm_child_categories').val() || [];
-                            if (selectedCategories.length === 0) {
-                                alert('<?php esc_html_e('Please select at least one category.', 'wc-mix-and-match'); ?>');
-                                e.preventDefault();
-                                return false;
-                            }
-                        }
-
-                        return true;
-                    });
                 });
 
             })(jQuery);
         </script>
-        <style type="text/css">
-            #mnm_product_data .wc-enhanced-select {
-                width: 100%;
-                max-width: 400px;
-            }
-
-            #mnm_product_data .form-field {
-                margin-bottom: 15px;
-            }
-
-            .mnm-summary {
-                transition: all 0.3s ease;
-            }
-        </style>
         <?php
     }
 }

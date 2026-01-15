@@ -150,12 +150,21 @@ final class WC_MNM_Frontend
             true
         );
 
+        $currency_pos = get_option('woocommerce_currency_pos');
+        $price_format = get_woocommerce_price_format();
+
         // Prepare minimal data
         wp_localize_script('wc-mnm-frontend', 'wc_mnm_params', [
             'product_id' => $product->get_id(),
             'min_qty' => $product->get_min_quantity(),
             'max_qty' => $product->get_max_quantity(),
             'pricing_mode' => $product->get_pricing_mode(),
+            'currency_symbol' => html_entity_decode(get_woocommerce_currency_symbol()),
+            'currency_position' => $currency_pos,
+            'price_format' => $price_format,
+            'price_decimals' => wc_get_price_decimals(),
+            'price_decimal_sep' => wc_get_price_decimal_separator(),
+            'price_thousand_sep' => wc_get_price_thousand_separator(),
             'i18n' => [
                 'selection_complete' => __('Selection complete. Ready to add to cart.', 'wc-mix-and-match'),
                 'need_more_items' => __('You have selected %d items, please select %d more item(s) to continue.', 'wc-mix-and-match'),

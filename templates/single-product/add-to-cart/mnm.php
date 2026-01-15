@@ -1,6 +1,6 @@
 <?php
 /**
- * Mix & Match Product Add to Cart Template - Minimal Version
+ * Mix & Match Product Add to Cart Template
  *
  * @package WooCommerce Mix & Match
  * @version 1.0.0
@@ -25,6 +25,8 @@ $child_products = $container->get_allowed_child_products();
 $min_qty = $container->get_min_quantity();
 $max_qty = $container->get_max_quantity();
 $pricing_mode = $container->get_pricing_mode();
+$display_layout = $container->get_display_layout();
+$rules_description = $container->get_rules_description();
 
 do_action('woocommerce_before_add_to_cart_form');
 ?>
@@ -33,12 +35,35 @@ do_action('woocommerce_before_add_to_cart_form');
 
     <?php do_action('woocommerce_before_add_to_cart_button'); ?>
 
-    <div class="wc-mnm-container">
+    <div class="wc-mnm-container wc-mnm-layout-<?php echo esc_attr($display_layout); ?>">
         
         <!-- Container title -->
         <h3 class="wc-mnm-container-title">
             <?php echo esc_html($container->get_container_size_string()); ?>
         </h3>
+
+        <?php if ($max_qty > 0): ?>
+            <div class="wc-mnm-progress">
+                <div class="wc-mnm-progress-bar">
+                    <div class="wc-mnm-progress-fill" id="wc-mnm-progress-fill" style="width: 0%"></div>
+                </div>
+                <div class="wc-mnm-progress-text">
+                    <span>
+                        <?php esc_html_e('0 items', 'wc-mix-and-match'); ?>
+                    </span>
+                    <span>
+                        <?php echo sprintf(__('%d maximum', 'wc-mix-and-match'), $max_qty); ?>
+                    </span>
+                </div>
+            </div>
+        <?php endif; ?>
+
+         <!-- Fixed Price Display -->
+        <?php if ('fixed' === $pricing_mode): ?>
+            <div class="wc-mnm-fixed-price">
+                <?php echo wp_kses_post(wc_price($container->get_fixed_price())); ?>
+            </div>
+        <?php endif; ?>
 
         <!-- Child Products Grid -->
         <div class="wc-mnm-child-products">
@@ -54,66 +79,67 @@ do_action('woocommerce_before_add_to_cart_form');
                     $image_url = $image_id ? wp_get_attachment_image_url($image_id, 'woocommerce_thumbnail') : wc_placeholder_img_src();
                 ?>
                     <div class="wc-mnm-child-product" data-child-id="<?php echo esc_attr($child_id); ?>">
-                        
-                        <!-- Product Image -->
-                        <div class="wc-mnm-child-image">
-                            <img src="<?php echo esc_url($image_url); ?>" 
-                                 alt="<?php echo esc_attr($child_product->get_name()); ?>"
-                                 loading="lazy" />
-                        </div>
-                        
-                        <!-- Product Name -->
-                        <h4 class="wc-mnm-child-title">
-                            <?php echo esc_html($child_product->get_name()); ?>
-                        </h4>
-                        
-                        <!-- Product Price (only for per-item mode) -->
-                        <?php if ('per_item' === $pricing_mode): ?>
-                            <div class="wc-mnm-child-price">
-                                <?php echo wp_kses_post($child_product->get_price_html()); ?>
-                            </div>
-                        <?php endif; ?>
-                        
-                        <!-- Stock Status -->
-                        <?php if (!$is_in_stock): ?>
-                            <p class="wc-mnm-child-out-of-stock stock out-of-stock">
-                                <?php esc_html_e('Out of stock', 'wc-mix-and-match'); ?>
-                            </p>
-                        <?php else: ?>
-                            <!-- Quantity Selector -->
-                            <div class="wc-mnm-quantity">
-                                <div class="wc-mnm-quantity-selector">
-                                    <button type="button" 
-                                            class="wc-mnm-quantity-btn decrease" 
-                                            data-target="<?php echo esc_attr($child_id); ?>"
-                                            aria-label="<?php esc_attr_e('Decrease quantity', 'wc-mix-and-match'); ?>">
-                                        &minus;
-                                    </button>
-                                    
-                                    <input 
-                                        type="number" 
-                                        id="wc-mnm-quantity-<?php echo esc_attr($child_id); ?>" 
-                                        class="wc-mnm-quantity-input" 
-                                        name="wc_mnm_quantity[<?php echo esc_attr($child_id); ?>]" 
-                                        value="0" 
-                                        min="0" 
-                                        <?php if ($max_qty > 0): ?>
-                                            max="<?php echo esc_attr($max_qty); ?>"
-                                        <?php endif; ?>
-                                        data-price="<?php echo esc_attr($child_product->get_price()); ?>"
-                                        aria-label="<?php echo esc_attr(sprintf(__('Quantity for %s', 'wc-mix-and-match'), $child_product->get_name())); ?>"
-                                    />
-                                    
-                                    <button type="button" 
-                                            class="wc-mnm-quantity-btn increase" 
-                                            data-target="<?php echo esc_attr($child_id); ?>"
-                                            aria-label="<?php esc_attr_e('Increase quantity', 'wc-mix-and-match'); ?>">
-                                        &plus;
-                                    </button>
-                                </div>
-                            </div>
-                        <?php endif; ?>
-                    </div>
+    
+    <!-- Product Image -->
+    <div class="wc-mnm-child-image">
+        <img src="<?php echo esc_url($image_url); ?>" 
+             alt="<?php echo esc_attr($child_product->get_name()); ?>"
+             loading="lazy" />
+    </div>
+    
+    <!-- Product Content -->
+    <div class="wc-mnm-child-content">
+        <h4 class="wc-mnm-child-title">
+            <?php echo esc_html($child_product->get_name()); ?>
+        </h4>
+        
+        <?php if ('per_item' === $pricing_mode): ?>
+            <div class="wc-mnm-child-price">
+                <?php echo wp_kses_post($child_product->get_price_html()); ?>
+            </div>
+        <?php endif; ?>
+    </div>
+    
+    <!-- Stock Status -->
+    <?php if (!$is_in_stock): ?>
+        <p class="wc-mnm-child-out-of-stock stock out-of-stock">
+            <?php esc_html_e('Out of stock', 'wc-mix-and-match'); ?>
+        </p>
+    <?php else: ?>
+        <!-- Quantity Selector -->
+        <div class="wc-mnm-quantity">
+            <div class="wc-mnm-quantity-selector">
+                <button type="button" 
+                        class="wc-mnm-quantity-btn decrease" 
+                        data-target="<?php echo esc_attr($child_id); ?>"
+                        aria-label="<?php esc_attr_e('Decrease quantity', 'wc-mix-and-match'); ?>">
+                    &minus;
+                </button>
+                
+                <input 
+                    type="number" 
+                    id="wc-mnm-quantity-<?php echo esc_attr($child_id); ?>" 
+                    class="wc-mnm-quantity-input" 
+                    name="wc_mnm_quantity[<?php echo esc_attr($child_id); ?>]" 
+                    value="0" 
+                    min="0" 
+                    <?php if ($max_qty > 0): ?>
+                        max="<?php echo esc_attr($max_qty); ?>"
+                    <?php endif; ?>
+                    data-price="<?php echo esc_attr($child_product->get_price()); ?>"
+                    aria-label="<?php echo esc_attr(sprintf(__('Quantity for %s', 'wc-mix-and-match'), $child_product->get_name())); ?>"
+                />
+                
+                <button type="button" 
+                        class="wc-mnm-quantity-btn increase" 
+                        data-target="<?php echo esc_attr($child_id); ?>"
+                        aria-label="<?php esc_attr_e('Increase quantity', 'wc-mix-and-match'); ?>">
+                    &plus;
+                </button>
+            </div>
+        </div>
+    <?php endif; ?>
+</div>
                 <?php endforeach; ?>
             <?php endif; ?>
         </div>
@@ -152,12 +178,12 @@ do_action('woocommerce_before_add_to_cart_form');
             <?php endif; ?>
         </div>
 
-        <!-- Add to Cart Section (uses theme styles) -->
+        <!-- Add to Cart Section -->
         <div class="wc-mnm-add-to-cart">
             <input type="hidden" name="add-to-cart" value="<?php echo esc_attr($product->get_id()); ?>" />
             
             <?php 
-            // Display quantity selector for container (uses theme styles)
+            // Display quantity selector for container
             if (!$product->is_sold_individually()):
                 woocommerce_quantity_input([
                     'min_value' => 1,
