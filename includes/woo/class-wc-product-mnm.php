@@ -6,13 +6,19 @@ if (!defined('ABSPATH')) {
 
 class WC_Product_MNM extends WC_Product_Simple
 {
-
     /**
      * Product type name used internally by WooCommerce.
      *
      * @var string
      */
     protected $product_type = 'mnm';
+
+    /**
+     * Cache for child products to avoid repeated queries
+     *
+     * @var array|null
+     */
+    protected $child_products_cache = null;
 
     /**
      * Return product type.
@@ -43,7 +49,7 @@ class WC_Product_MNM extends WC_Product_Simple
      */
     public function get_min_quantity(): int
     {
-        return absint( $this->get_meta('_mnm_min_qty', true) ?: 0);
+        return absint($this->get_meta('_mnm_min_qty', true) ?: 0);
     }
 
     /**
@@ -51,7 +57,7 @@ class WC_Product_MNM extends WC_Product_Simple
      */
     public function get_max_quantity(): int
     {
-        return absint( $this->get_meta('_mnm_max_qty', true) ?: 0);
+        return absint($this->get_meta('_mnm_max_qty', true) ?: 0);
     }
 
     /**
@@ -63,12 +69,20 @@ class WC_Product_MNM extends WC_Product_Simple
     }
 
     /**
+     * Get maximum products limit
+     */
+    public function get_max_products_limit(): int
+    {
+        return absint($this->get_meta('_mnm_max_products_limit', true) ?: 0);
+    }
+
+    /**
      * Get selected child product IDs
      */
     public function get_child_product_ids(): array
     {
         $ids = $this->get_meta('_mnm_child_products', true);
-        return is_array($ids) ? array_map('absint', $ids): [];
+        return is_array($ids) ? array_map('absint', $ids) : [];
     }
 
     /**
@@ -81,88 +95,172 @@ class WC_Product_MNM extends WC_Product_Simple
     }
 
     /**
-     * Resolve and get all allowed child products (actual WC_Product objects)
-     * Based on source (products or categories)
+     * Get selected tag IDs
      */
+    public function get_child_tag_ids(): array
+    {
+        $ids = $this->get_meta('_mnm_child_tags', true);
+        return is_array($ids) ? array_map('absint', $ids) : [];
+    }
 
+    /**
+     * Get display layout
+     */
+    public function get_display_layout(): string
+    {
+        return $this->get_meta('_mnm_display_layout', true) ?: 'grid';
+    }
+
+    /**
+     * Resolve and get all allowed child products (actual WC_Product objects)
+     */
     public function get_allowed_child_products(): array
     {
+        // Use cache to avoid repeated queries
+        if ($this->child_products_cache !== null) {
+            return $this->child_products_cache;
+        }
+
         $child_products = [];
         $source = $this->get_child_source();
+        $max_limit = $this->get_max_products_limit();
 
-        if ('products' === $source) {
-            // Get specific products
-            $product_ids = $this->get_child_product_ids();
-            foreach ($product_ids as $product_id) {
-                $product = wc_get_product($product_id);
-                if ($product && $product->is_type('simple') && $product->is_purchasable()) {
-                    $child_products[$product_id] = $product;
-                }
+        switch ($source) {
+            case 'products':
+                $child_products = $this->get_products_from_selection();
+                break;
+
+            case 'categories':
+                $child_products = $this->get_products_from_categories($max_limit);
+                break;
+
+            case 'tags':
+                $child_products = $this->get_products_from_tags($max_limit);
+                break;
+        }
+
+        // Cache the result
+        $this->child_products_cache = $child_products;
+
+        return $child_products;
+    }
+
+    /**
+     * Get products from specific product selection
+     */
+    private function get_products_from_selection(): array
+    {
+        $product_ids = $this->get_child_product_ids();
+        $products = [];
+
+        foreach ($product_ids as $product_id) {
+            $product = wc_get_product($product_id);
+            if ($this->is_valid_child_product($product)) {
+                $products[$product_id] = $product;
             }
-        } elseif ('categories' === $source) {
-            // Get products from selected categories
-            $category_ids = $this->get_child_category_ids();
+        }
 
-            if (empty($category_ids)) {
-                return [];
-            }
+        return $products;
+    }
 
-            // Debug: Log category IDs
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('[WC_MNM] Fetching products from categories: ' . print_r($category_ids, true));
-            }
+    /**
+     * Get products from selected categories
+     */
+    private function get_products_from_categories(int $limit = 0): array
+    {
+        $category_ids = $this->get_child_category_ids();
 
-            // Build tax query for categories
-            $tax_query = [
+        if (empty($category_ids)) {
+            return [];
+        }
+
+        $args = [
+            'limit' => $limit > 0 ? $limit : -1,
+            'type' => ['simple'],
+            'status' => 'publish',
+            'return' => 'objects',
+            'orderby' => 'title',
+            'order' => 'ASC',
+            'tax_query' => [
                 [
                     'taxonomy' => 'product_cat',
                     'field' => 'term_id',
                     'terms' => $category_ids,
                     'operator' => 'IN',
                 ]
-            ];
+            ],
+        ];
 
-            // Check if we need to include subcategories
-            $args = [
-                'limit' => -1,
-                'type' => ['simple'], 
-                'status' => 'publish',
-                'return' => 'objects',
-                'orderby' => 'title',
-                'order' => 'ASC',
-                'tax_query' => $tax_query,
-            ];
+        $products = wc_get_products($args);
+        $valid_products = [];
 
-            // Debug: Log the query args
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('[WC_MNM] Product query args: ' . print_r($args, true));
-            }
-
-            $products = wc_get_products($args);
-
-            // Debug
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('[WC_MNM] Found ' . count($products) . ' products from categories');
-                foreach ($products as $product) {
-                    error_log('[WC_MNM] Product: ' . $product->get_name() . ' (ID: ' . $product->get_id() . ')');
-                }
-            }
-
-            foreach ($products as $product) {
-                if ($product->is_purchasable() && $product->is_type('simple')) {
-                    $child_products[$product->get_id()] = $product;
-                }
+        foreach ($products as $product) {
+            if ($this->is_valid_child_product($product)) {
+                $valid_products[$product->get_id()] = $product;
             }
         }
 
-        // Debug
-        if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log('[WC_MNM] Total child products returned: ' . count($child_products));
-        }
-
-        return $child_products;
+        return $valid_products;
     }
 
+    /**
+     * Get products from selected tags
+     */
+    private function get_products_from_tags(int $limit = 0): array
+    {
+        $tag_ids = $this->get_child_tag_ids();
+
+        if (empty($tag_ids)) {
+            return [];
+        }
+
+        $args = [
+            'limit' => $limit > 0 ? $limit : -1,
+            'type' => ['simple'],
+            'status' => 'publish',
+            'return' => 'objects',
+            'orderby' => 'title',
+            'order' => 'ASC',
+            'tax_query' => [
+                [
+                    'taxonomy' => 'product_tag',
+                    'field' => 'term_id',
+                    'terms' => $tag_ids,
+                    'operator' => 'IN',
+                ]
+            ],
+        ];
+
+        $products = wc_get_products($args);
+        $valid_products = [];
+
+        foreach ($products as $product) {
+            if ($this->is_valid_child_product($product)) {
+                $valid_products[$product->get_id()] = $product;
+            }
+        }
+
+        return $valid_products;
+    }
+
+    /**
+     * Check if a product is valid as a child product
+     */
+    private function is_valid_child_product($product): bool
+    {
+        return $product &&
+            $product->is_type('simple') &&
+            $product->is_purchasable() &&
+            $product->is_visible();
+    }
+
+    /**
+     * Clear child products cache
+     */
+    public function clear_child_products_cache(): void
+    {
+        $this->child_products_cache = null;
+    }
 
     /**
      * Get container size string for display
@@ -195,15 +293,6 @@ class WC_Product_MNM extends WC_Product_Simple
         return parent::is_purchasable() && !empty($allowed_products);
     }
 
-
-    /**
-     * Get display layout
-     */
-    public function get_display_layout(): string
-    {
-        return $this->get_meta('_mnm_display_layout', true) ?: 'grid';
-    }
-
     /**
      * Get container rules description
      */
@@ -224,5 +313,33 @@ class WC_Product_MNM extends WC_Product_Simple
         }
 
         return __('Select items.', 'wc-mix-and-match');
+    }
+
+    /**
+     * Get child source description for admin reference
+     */
+    public function get_child_source_description(): string
+    {
+        $source = $this->get_child_source();
+        $limit = $this->get_max_products_limit();
+
+        switch ($source) {
+            case 'products':
+                $count = count($this->get_child_product_ids());
+                return sprintf(__('%d specific products', 'wc-mix-and-match'), $count);
+
+            case 'categories':
+                $count = count($this->get_child_category_ids());
+                $limit_text = $limit > 0 ? sprintf(__(' (limited to %d products)', 'wc-mix-and-match'), $limit) : '';
+                return sprintf(__('%d product categories%s', 'wc-mix-and-match'), $count, $limit_text);
+
+            case 'tags':
+                $count = count($this->get_child_tag_ids());
+                $limit_text = $limit > 0 ? sprintf(__(' (limited to %d products)', 'wc-mix-and-match'), $limit) : '';
+                return sprintf(__('%d product tags%s', 'wc-mix-and-match'), $count, $limit_text);
+
+            default:
+                return __('No source selected', 'wc-mix-and-match');
+        }
     }
 }
