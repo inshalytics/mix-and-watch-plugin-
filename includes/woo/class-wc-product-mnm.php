@@ -45,6 +45,14 @@ class WC_Product_MNM extends WC_Product_Simple
     }
 
     /**
+     * Get base container price (for base_addon mode)
+     */
+    public function get_base_price(): float
+    {
+        return floatval($this->get_meta('_mnm_base_price', true) ?: 0);
+    }
+
+    /**
      * Get minimum quantity
      */
     public function get_min_quantity(): int
@@ -109,6 +117,138 @@ class WC_Product_MNM extends WC_Product_Simple
     public function get_display_layout(): string
     {
         return $this->get_meta('_mnm_display_layout', true) ?: 'grid';
+    }
+
+    /**
+     * Calculate container price based on selected items
+     */
+    public function calculate_container_price(array $selected_items = []): float
+    {
+        $pricing_mode = $this->get_pricing_mode();
+
+        switch ($pricing_mode) {
+            case 'fixed':
+                return $this->get_fixed_price();
+
+            case 'base_addon':
+                $base_price = $this->get_base_price();
+                $addons_total = $this->calculate_addons_total($selected_items);
+                return $base_price + $addons_total;
+
+            case 'per_item':
+            default:
+                return $this->calculate_addons_total($selected_items);
+        }
+    }
+
+    /**
+     * Calculate total price of selected add-on items
+     */
+    private function calculate_addons_total(array $selected_items): float
+    {
+        $total = 0.0;
+
+        foreach ($selected_items as $product_id => $quantity) {
+            $product = wc_get_product($product_id);
+            if ($product && $quantity > 0) {
+                $total += $product->get_price() * $quantity;
+            }
+        }
+
+        return $total;
+    }
+
+    /**
+     * Get minimum possible price for this container
+     */
+    public function get_minimum_price(): float
+    {
+        $pricing_mode = $this->get_pricing_mode();
+        $min_qty = $this->get_min_quantity();
+
+        switch ($pricing_mode) {
+            case 'fixed':
+                return $this->get_fixed_price();
+
+            case 'base_addon':
+                $base_price = $this->get_base_price();
+                if ($min_qty > 0) {
+                    $min_addon_price = $this->get_minimum_addon_price();
+                    return $base_price + $min_addon_price;
+                }
+                return $base_price;
+
+            case 'per_item':
+            default:
+                if ($min_qty > 0) {
+                    return $this->get_minimum_addon_price();
+                }
+                return 0.0;
+        }
+    }
+
+    /**
+     * Get minimum possible add-on price based on cheapest items
+     */
+    private function get_minimum_addon_price(): float
+    {
+        $min_qty = $this->get_min_quantity();
+        if ($min_qty <= 0) {
+            return 0.0;
+        }
+
+        $child_products = $this->get_allowed_child_products();
+        if (empty($child_products)) {
+            return 0.0;
+        }
+
+        // Get prices of all child products
+        $prices = [];
+        foreach ($child_products as $product) {
+            $prices[] = $product->get_price();
+        }
+
+        // Sort prices ascending
+        sort($prices);
+
+        // Calculate minimum price for required quantity
+        $total = 0.0;
+        for ($i = 0; $i < min($min_qty, count($prices)); $i++) {
+            $total += $prices[$i];
+        }
+
+        return $total;
+    }
+
+    /**
+     * Get pricing description for frontend display
+     */
+    public function get_pricing_description(): string
+    {
+        $pricing_mode = $this->get_pricing_mode();
+        $min_qty = $this->get_min_quantity();
+
+        switch ($pricing_mode) {
+            case 'fixed':
+                $price = wc_price($this->get_fixed_price());
+                return sprintf(__('Fixed price: %s', 'wc-mix-and-match'), $price);
+
+            case 'base_addon':
+                $base_price = wc_price($this->get_base_price());
+                if ($min_qty > 0) {
+                    $min_price = wc_price($this->get_minimum_price());
+                    return sprintf(__('Base price: %s + item prices (minimum: %s)', 'wc-mix-and-match'), $base_price, $min_price);
+                }
+                return sprintf(__('Base price: %s + item prices', 'wc-mix-and-match'), $base_price);
+
+            case 'per_item':
+            default:
+                if ($min_qty > 0) {
+                    $min_price = wc_price($this->get_minimum_price());
+                    return sprintf(__('Item prices (minimum: %s)', 'wc-mix-and-match'), $min_price);
+                }
+                return __('Item prices', 'wc-mix-and-match');
+        }
     }
 
     /**
@@ -300,19 +440,37 @@ class WC_Product_MNM extends WC_Product_Simple
     {
         $min = $this->get_min_quantity();
         $max = $this->get_max_quantity();
+        $pricing_mode = $this->get_pricing_mode();
+
+        $rules = [];
 
         if ($min > 0 && $max > 0) {
             if ($min === $max) {
-                return sprintf(__('Select exactly %d items total.', 'wc-mix-and-match'), $min);
+                $rules[] = sprintf(__('Select exactly %d items total.', 'wc-mix-and-match'), $min);
+            } else {
+                $rules[] = sprintf(__('Select %1$d to %2$d items total.', 'wc-mix-and-match'), $min, $max);
             }
-            return sprintf(__('Select %1$d to %2$d items total.', 'wc-mix-and-match'), $min, $max);
         } elseif ($min > 0) {
-            return sprintf(__('Select at least %d items total.', 'wc-mix-and-match'), $min);
+            $rules[] = sprintf(__('Select at least %d items total.', 'wc-mix-and-match'), $min);
         } elseif ($max > 0) {
-            return sprintf(__('Select up to %d items total.', 'wc-mix-and-match'), $max);
+            $rules[] = sprintf(__('Select up to %d items total.', 'wc-mix-and-match'), $max);
         }
 
-        return __('Select items.', 'wc-mix-and-match');
+        // Add pricing info
+        switch ($pricing_mode) {
+            case 'fixed':
+                $rules[] = __('Fixed container price.', 'wc-mix-and-match');
+                break;
+            case 'base_addon':
+                $base_price = wc_price($this->get_base_price());
+                $rules[] = sprintf(__('Base container price: %s.', 'wc-mix-and-match'), $base_price);
+                break;
+            case 'per_item':
+                $rules[] = __('Pay for selected items.', 'wc-mix-and-match');
+                break;
+        }
+
+        return implode(' ', $rules);
     }
 
     /**
@@ -340,6 +498,28 @@ class WC_Product_MNM extends WC_Product_Simple
 
             default:
                 return __('No source selected', 'wc-mix-and-match');
+        }
+    }
+
+    /**
+     * Get pricing mode description for admin
+     */
+    public function get_pricing_mode_description(): string
+    {
+        $mode = $this->get_pricing_mode();
+
+        switch ($mode) {
+            case 'fixed':
+                $price = wc_price($this->get_fixed_price());
+                return sprintf(__('Fixed Price: %s', 'wc-mix-and-match'), $price);
+
+            case 'base_addon':
+                $base_price = wc_price($this->get_base_price());
+                return sprintf(__('Base Price + Add-ons: %s base + item prices', 'wc-mix-and-match'), $base_price);
+
+            case 'per_item':
+            default:
+                return __('Per Item: Sum of selected item prices', 'wc-mix-and-match');
         }
     }
 }
